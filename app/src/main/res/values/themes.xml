@@ -1,0 +1,6 @@
+<resources>
+    <style name="Theme.IRIS_IDS" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:windowBackground">@android:color/white</item>
+        <item name="android:windowActivityTransitions">true</item>
+    </style>
+</resources>

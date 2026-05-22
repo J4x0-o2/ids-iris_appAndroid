@@ -22,7 +22,7 @@ Sistema de control de asistencia biométrico por reconocimiento facial. Los insp
 
 | Dispositivo | Especificación |
 |-------------|---------------|
-| Tablet | Lenovo Tab M10 (×12 unidades) |
+| Tablet | Lenovo Tab M10 |
 | Android | 9.0 (API 28) o superior |
 | Cámara | Frontal obligatoria para reconocimiento facial |
 | Conectividad | Wi-Fi para sincronización con el backend |
