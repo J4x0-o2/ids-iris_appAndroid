@@ -11,6 +11,7 @@ import com.j4x.iris_ids.domain.repository.SessionRepository
 import com.j4x.iris_ids.domain.usecase.RegisterEventUseCase
 import com.j4x.iris_ids.domain.usecase.VerifyFaceUseCase
 import com.j4x.iris_ids.ui.camera.FaceData
+import com.j4x.iris_ids.ui.camera.FaceQuality
 import com.j4x.iris_ids.ui.camera.LivenessStateMachine
 import com.j4x.iris_ids.ui.components.SilhouettePhase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -37,6 +38,7 @@ data class CaptureUiState(
     val navigateToSuccess: Boolean = false,
     /** true cuando liveness completo → Screen captura JPEG y llama onImageCaptured */
     val shouldCapture: Boolean = false,
+    val quality: FaceQuality = FaceQuality(),
 )
 
 @HiltViewModel
@@ -85,6 +87,7 @@ class CaptureViewModel @Inject constructor(
 
         if (eventType == "IN") {
             // Solo identificación facial, sin pruebas de liveness
+            if (!_uiState.value.quality.isReady) return
             _uiState.update { it.copy(phase = SilhouettePhase.Scanning, shouldCapture = true) }
             return
         }
@@ -102,6 +105,11 @@ class CaptureViewModel @Inject constructor(
     // ── Callback desde FaceAnalyzer (hilo de análisis, thread-safe) ──────────
 
     fun onFaceData(data: FaceData?) {
+        // Actualizar calidad solo mientras se espera en Framing
+        if (_uiState.value.phase == SilhouettePhase.Framing) {
+            val quality = if (data == null) FaceQuality() else FaceQuality.from(data)
+            _uiState.update { it.copy(quality = quality) }
+        }
         if (_uiState.value.phase != SilhouettePhase.Scanning) return
         if (data == null) return
         if (eventType == "IN") return  // IN: solo espera la captura directa, sin desafíos

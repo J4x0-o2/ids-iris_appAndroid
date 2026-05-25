@@ -49,6 +49,7 @@ import com.j4x.iris_ids.ui.camera.CaptureController
 import com.j4x.iris_ids.ui.components.CornerBrackets
 import com.j4x.iris_ids.ui.components.FaceSilhouette
 import com.j4x.iris_ids.ui.components.NoCameraPermission
+import com.j4x.iris_ids.ui.components.QualityBar
 import com.j4x.iris_ids.ui.components.ScreenHeader
 import com.j4x.iris_ids.ui.components.SilhouettePhase
 import com.j4x.iris_ids.ui.theme.IrisCameraBg
@@ -96,7 +97,7 @@ fun FaceLoginScreen(
     // ── CaptureController ────────────────────────────────────────────────────
     val captureController = remember { CaptureController() }
 
-    // ── Captura JPEG cuando liveness completa ────────────────────────────────
+    // ── Captura JPEG cuando se dispara la verificación ───────────────────────
     LaunchedEffect(uiState.shouldCapture) {
         if (uiState.shouldCapture) {
             val base64 = captureController.takePicture()
@@ -198,7 +199,11 @@ fun FaceLoginScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            StatusMessage(phase = uiState.phase, instruction = uiState.challengeInstruction)
+            StatusMessage(phase = uiState.phase)
+
+            if (uiState.phase == SilhouettePhase.Framing) {
+                QualityBar(quality = uiState.quality)
+            }
 
             if (uiState.phase == SilhouettePhase.Matched && uiState.matchedName != null) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -218,7 +223,11 @@ fun FaceLoginScreen(
                 }
             }
 
-            ShutterButton(phase = uiState.phase, onClick = viewModel::startVerification)
+            ShutterButton(
+                phase    = uiState.phase,
+                ready    = uiState.quality.isReady,
+                onClick  = viewModel::startVerification,
+            )
 
             Spacer(Modifier.height(36.dp))
         }
@@ -226,10 +235,10 @@ fun FaceLoginScreen(
 }
 
 @Composable
-private fun StatusMessage(phase: SilhouettePhase, instruction: String) {
+private fun StatusMessage(phase: SilhouettePhase) {
     val (text, color) = when (phase) {
         SilhouettePhase.Framing  -> "Centre su rostro dentro del marco" to IrisSurface.copy(alpha = 0.75f)
-        SilhouettePhase.Scanning -> instruction.ifEmpty { "Iniciando…" } to IrisSurface.copy(alpha = 0.90f)
+        SilhouettePhase.Scanning -> "Analizando rostro…" to IrisSurface.copy(alpha = 0.90f)
         SilhouettePhase.Matched  -> "Identidad verificada" to IrisScanMatch
     }
     Text(
@@ -241,14 +250,19 @@ private fun StatusMessage(phase: SilhouettePhase, instruction: String) {
 }
 
 @Composable
-private fun ShutterButton(phase: SilhouettePhase, onClick: () -> Unit) {
-    val ringColor  = if (phase == SilhouettePhase.Matched) IrisDone else IrisSurface.copy(alpha = 0.6f)
-    val innerColor = when (phase) {
-        SilhouettePhase.Framing  -> IrisDone
-        SilhouettePhase.Scanning -> IrisDone.copy(alpha = 0.4f)
-        SilhouettePhase.Matched  -> IrisDone
+private fun ShutterButton(phase: SilhouettePhase, ready: Boolean, onClick: () -> Unit) {
+    val enabled    = phase == SilhouettePhase.Framing && ready
+    val ringColor  = when {
+        phase == SilhouettePhase.Matched -> IrisDone
+        enabled -> IrisSurface.copy(alpha = 0.6f)
+        else    -> IrisSurface.copy(alpha = 0.25f)
     }
-    val enabled = phase == SilhouettePhase.Framing
+    val innerColor = when {
+        phase == SilhouettePhase.Scanning -> IrisDone.copy(alpha = 0.4f)
+        phase == SilhouettePhase.Matched  -> IrisDone
+        enabled -> IrisDone
+        else    -> IrisDone.copy(alpha = 0.25f)
+    }
 
     Box(
         modifier = Modifier

@@ -51,6 +51,7 @@ import com.j4x.iris_ids.ui.camera.CaptureController
 import com.j4x.iris_ids.ui.components.CornerBrackets
 import com.j4x.iris_ids.ui.components.FaceSilhouette
 import com.j4x.iris_ids.ui.components.NoCameraPermission
+import com.j4x.iris_ids.ui.components.QualityBar
 import com.j4x.iris_ids.ui.components.ScreenHeader
 import com.j4x.iris_ids.ui.components.SilhouettePhase
 import com.j4x.iris_ids.ui.theme.IrisCameraBg
@@ -106,7 +107,7 @@ fun CaptureScreen(
     // ── CaptureController ────────────────────────────────────────────────────
     val captureController = remember { CaptureController() }
 
-    // ── Captura JPEG cuando liveness completa (solo IN/OUT) ──────────────────
+    // ── Captura JPEG cuando liveness completa (solo IN/OUT) ─────────────────
     LaunchedEffect(uiState.shouldCapture) {
         if (uiState.shouldCapture) {
             val base64 = captureController.takePicture()
@@ -229,6 +230,10 @@ fun CaptureScreen(
 
             CaptureStatusMessage(uiState = uiState, accentColor = accentColor)
 
+            if (uiState.phase == SilhouettePhase.Framing) {
+                QualityBar(quality = uiState.quality)
+            }
+
             uiState.matchedName?.let { name ->
                 if (uiState.phase == SilhouettePhase.Matched) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -251,6 +256,7 @@ fun CaptureScreen(
 
             CaptureShutterButton(
                 phase       = uiState.phase,
+                ready       = uiState.quality.isReady,
                 accentColor = accentColor,
                 onClick     = viewModel::startCapture,
             )
@@ -286,16 +292,22 @@ private fun CaptureStatusMessage(uiState: CaptureUiState, accentColor: androidx.
 @Composable
 private fun CaptureShutterButton(
     phase: SilhouettePhase,
+    ready: Boolean,
     accentColor: androidx.compose.ui.graphics.Color,
     onClick: () -> Unit,
 ) {
-    val ringColor  = if (phase == SilhouettePhase.Matched) IrisDone else IrisSurface.copy(alpha = 0.6f)
-    val innerColor = when (phase) {
-        SilhouettePhase.Framing  -> accentColor
-        SilhouettePhase.Scanning -> accentColor.copy(alpha = 0.4f)
-        SilhouettePhase.Matched  -> IrisDone
+    val enabled   = phase == SilhouettePhase.Framing && ready
+    val ringColor = when {
+        phase == SilhouettePhase.Matched -> IrisDone
+        enabled -> IrisSurface.copy(alpha = 0.6f)
+        else    -> IrisSurface.copy(alpha = 0.25f)
     }
-    val enabled = phase == SilhouettePhase.Framing
+    val innerColor = when {
+        phase == SilhouettePhase.Scanning -> accentColor.copy(alpha = 0.4f)
+        phase == SilhouettePhase.Matched  -> IrisDone
+        enabled -> accentColor
+        else    -> accentColor.copy(alpha = 0.25f)
+    }
 
     Box(
         modifier = Modifier

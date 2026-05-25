@@ -43,6 +43,18 @@ class FaceAnalyzer(
             return
         }
 
+        // Brillo medio del canal Y (luminancia) — sin copiar el buffer completo
+        val brightness = proxy.planes[0].buffer.let { buf ->
+            val step = (buf.remaining() / 1024).coerceAtLeast(1)
+            var sum = 0L; var count = 0
+            while (buf.hasRemaining()) {
+                sum += (buf.get().toInt() and 0xFF)
+                count++
+                if (buf.remaining() >= step) repeat(step - 1) { buf.get() }
+            }
+            if (count > 0) sum.toFloat() / count else 128f
+        }
+
         val image = InputImage.fromMediaImage(mediaImage, proxy.imageInfo.rotationDegrees)
 
         detector.process(image)
@@ -50,10 +62,15 @@ class FaceAnalyzer(
                 val face = faces.firstOrNull()
                 onFaceData(
                     face?.let {
+                        val widthRatio = it.boundingBox.width().toFloat() / proxy.width
                         FaceData(
                             leftEyeOpenProbability  = it.leftEyeOpenProbability,
                             rightEyeOpenProbability = it.rightEyeOpenProbability,
                             headEulerAngleY         = it.headEulerAngleY,
+                            headEulerAngleX         = it.headEulerAngleX,
+                            headEulerAngleZ         = it.headEulerAngleZ,
+                            brightness              = brightness,
+                            faceWidthRatio          = widthRatio,
                         )
                     }
                 )

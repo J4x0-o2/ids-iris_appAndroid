@@ -4,13 +4,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.j4x.iris_ids.data.local.prefs.DeviceIdManager
 import com.j4x.iris_ids.domain.model.EventType
-import com.j4x.iris_ids.domain.model.LivenessChallenge
 import com.j4x.iris_ids.domain.model.Session
 import com.j4x.iris_ids.domain.repository.SessionRepository
 import com.j4x.iris_ids.domain.usecase.RegisterEventUseCase
 import com.j4x.iris_ids.domain.usecase.VerifyFaceUseCase
 import com.j4x.iris_ids.ui.camera.FaceData
-import com.j4x.iris_ids.ui.camera.LivenessStateMachine
+import com.j4x.iris_ids.ui.camera.FaceQuality
 import com.j4x.iris_ids.ui.components.SilhouettePhase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,12 +21,11 @@ import javax.inject.Inject
 
 data class FaceLoginUiState(
     val phase: SilhouettePhase = SilhouettePhase.Framing,
-    val challengeInstruction: String = "",
     val matchedName: String? = null,
     val matchedCode: String? = null,
     val navigateToHome: Boolean = false,
-    /** true cuando liveness completo → Screen captura JPEG y llama onImageCaptured */
     val shouldCapture: Boolean = false,
+    val quality: FaceQuality = FaceQuality(),
 )
 
 @HiltViewModel
@@ -41,38 +39,20 @@ class FaceLoginViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(FaceLoginUiState())
     val uiState: StateFlow<FaceLoginUiState> = _uiState.asStateFlow()
 
-    private var stateMachine = LivenessStateMachine(LivenessChallenge.randomSequence())
-
     // ── ShutterButton tap (solo en Framing) ──────────────────────────────────
 
     fun startVerification() {
         if (_uiState.value.phase != SilhouettePhase.Framing) return
-        stateMachine = LivenessStateMachine(LivenessChallenge.randomSequence())
-        _uiState.update {
-            it.copy(
-                phase                = SilhouettePhase.Scanning,
-                challengeInstruction = stateMachine.currentChallenge?.instruction ?: "",
-            )
-        }
+        if (!_uiState.value.quality.isReady) return
+        _uiState.update { it.copy(phase = SilhouettePhase.Scanning, shouldCapture = true) }
     }
 
-    // ── Callback desde FaceAnalyzer (hilo de análisis, thread-safe) ──────────
+    // ── Callback desde FaceAnalyzer — actualiza calidad en tiempo real ────────
 
     fun onFaceData(data: FaceData?) {
-        if (_uiState.value.phase != SilhouettePhase.Scanning) return
-        if (data == null) return
-
-        stateMachine.process(data)
-
-        if (stateMachine.isComplete) {
-            _uiState.update { it.copy(phase = SilhouettePhase.Matched, shouldCapture = true) }
-            return
-        }
-
-        val instruction = stateMachine.currentChallenge?.instruction ?: ""
-        if (_uiState.value.challengeInstruction != instruction) {
-            _uiState.update { it.copy(challengeInstruction = instruction) }
-        }
+        if (_uiState.value.phase != SilhouettePhase.Framing) return
+        val quality = if (data == null) FaceQuality() else FaceQuality.from(data)
+        _uiState.update { it.copy(quality = quality) }
     }
 
     // ── Callback desde Screen tras capturar el JPEG ───────────────────────────
@@ -101,17 +81,12 @@ class FaceLoginViewModel @Inject constructor(
                     }
                 }
                 .onFailure {
-                    // Rostro no reconocido o error de red — reiniciar para nuevo intento
-                    stateMachine = LivenessStateMachine(LivenessChallenge.randomSequence())
-                    _uiState.update {
-                        it.copy(phase = SilhouettePhase.Framing, challengeInstruction = "")
-                    }
+                    _uiState.update { it.copy(phase = SilhouettePhase.Framing) }
                 }
         }
     }
 
     fun onNavigatedToHome() {
         _uiState.update { FaceLoginUiState() }
-        stateMachine = LivenessStateMachine(LivenessChallenge.randomSequence())
     }
 }
