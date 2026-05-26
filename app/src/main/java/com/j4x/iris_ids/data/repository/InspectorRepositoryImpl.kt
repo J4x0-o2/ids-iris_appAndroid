@@ -29,7 +29,7 @@ class InspectorRepositoryImpl @Inject constructor(
                 name         = name,
                 documentId   = documentId,
                 role         = role,
-                imageBase64  = imagesBase64.first(),
+                imagesBase64 = imagesBase64,
             )
         ).body() ?: error("Empty response")
         Inspector(id = body.inspectorId, name = name, documentId = documentId, role = role)

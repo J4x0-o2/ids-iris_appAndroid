@@ -21,9 +21,9 @@ data class EnrollUiState(
     val step: EnrollStep = EnrollStep.Instructions,
     val capturePhase: SilhouettePhase = SilhouettePhase.Framing,
     val challengeInstruction: String = "",
-    /** true cuando liveness completo → Screen captura JPEG y llama onImageCaptured */
     val shouldCapture: Boolean = false,
-    val capturedBase64: String = "",
+    /** Acumula base64 de cada foto capturada: frontal, HEAD_LEFT, HEAD_RIGHT */
+    val capturedImages: List<String> = emptyList(),
     val name: String = "",
     val code: String = "",
     val role: String = "",
@@ -42,7 +42,7 @@ class EnrollViewModel @Inject constructor(
     val uiState: StateFlow<EnrollUiState> = _uiState.asStateFlow()
 
     private var stateMachine = LivenessStateMachine(emptyList())
-    // true mientras se espera la foto frontal; false durante los desafíos
+    // true mientras se espera la foto frontal; false durante los desafíos de pose
     private var isFrontCapture = true
 
     fun goToCapture() = _uiState.update { it.copy(step = EnrollStep.Capture) }
@@ -68,10 +68,16 @@ class EnrollViewModel @Inject constructor(
         if (isFrontCapture) return  // aún esperando la foto frontal
         if (data == null) return
 
-        stateMachine.process(data)
+        val challengeCompleted = stateMachine.process(data)
 
-        if (stateMachine.isComplete) {
-            _uiState.update { it.copy(capturePhase = SilhouettePhase.Matched, step = EnrollStep.Form) }
+        if (challengeCompleted) {
+            if (stateMachine.isComplete) {
+                // Última pose (HEAD_RIGHT): marcar como Matched + capturar foto final
+                _uiState.update { it.copy(capturePhase = SilhouettePhase.Matched, shouldCapture = true) }
+            } else {
+                // Pose intermedia (HEAD_LEFT): capturar foto en esta pose
+                _uiState.update { it.copy(shouldCapture = true) }
+            }
             return
         }
 
@@ -81,20 +87,33 @@ class EnrollViewModel @Inject constructor(
         }
     }
 
-    // ── Callback desde Screen tras capturar el JPEG frontal ──────────────────
+    // ── Callback desde Screen tras capturar cada JPEG ────────────────────────
 
     fun onImageCaptured(base64: String) {
-        isFrontCapture = false
-        // Iniciar secuencia fija: izquierda → derecha
-        stateMachine = LivenessStateMachine(
-            listOf(LivenessChallenge.HEAD_LEFT, LivenessChallenge.HEAD_RIGHT)
-        )
-        _uiState.update {
-            it.copy(
-                shouldCapture        = false,
-                capturedBase64       = base64,
-                challengeInstruction = stateMachine.currentChallenge?.instruction ?: "",
+        if (isFrontCapture) {
+            // Foto frontal recibida → iniciar secuencia de poses
+            isFrontCapture = false
+            stateMachine = LivenessStateMachine(
+                listOf(LivenessChallenge.HEAD_LEFT, LivenessChallenge.HEAD_RIGHT)
             )
+            _uiState.update {
+                it.copy(
+                    shouldCapture        = false,
+                    capturedImages       = listOf(base64),
+                    challengeInstruction = stateMachine.currentChallenge?.instruction ?: "",
+                )
+            }
+        } else {
+            // Foto de pose (HEAD_LEFT o HEAD_RIGHT): acumular
+            val images = _uiState.value.capturedImages + base64
+            val allDone = _uiState.value.capturePhase == SilhouettePhase.Matched
+            _uiState.update {
+                it.copy(
+                    shouldCapture  = false,
+                    capturedImages = images,
+                    step           = if (allDone) EnrollStep.Form else it.step,
+                )
+            }
         }
     }
 
@@ -118,7 +137,7 @@ class EnrollViewModel @Inject constructor(
                 name         = s.name,
                 documentId   = s.code,
                 role         = s.role,
-                imagesBase64 = listOf(s.capturedBase64),
+                imagesBase64 = s.capturedImages,
             )
                 .onSuccess {
                     _uiState.update { it.copy(isSubmitting = false, step = EnrollStep.Success) }
@@ -143,7 +162,7 @@ class EnrollViewModel @Inject constructor(
                     capturePhase         = SilhouettePhase.Framing,
                     challengeInstruction = "",
                     shouldCapture        = false,
-                    capturedBase64       = "",
+                    capturedImages       = emptyList(),
                 )
             }
             true
@@ -156,7 +175,7 @@ class EnrollViewModel @Inject constructor(
                     capturePhase         = SilhouettePhase.Framing,
                     challengeInstruction = "",
                     shouldCapture        = false,
-                    capturedBase64       = "",
+                    capturedImages       = emptyList(),
                 )
             }
             true

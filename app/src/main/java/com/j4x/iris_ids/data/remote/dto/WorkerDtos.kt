@@ -4,7 +4,7 @@ data class EnrollRequest(
     val name: String,
     val documentId: String,
     val role: String,
-    val imageBase64: String,
+    val imagesBase64: List<String>,
 )
 
 data class EnrollResponse(
