@@ -2,7 +2,7 @@
 
 Sistema de control de asistencia biométrico por reconocimiento facial. Los inspectores fichan mediante su rostro en tablets Android distribuidas en campo. El administrador gestiona el sistema desde un panel web conectado al mismo backend.
 
-**Versión actual:** 1.0.0 | **minSdk:** 28 (Android 9) | **targetSdk:** 36
+**Versión actual:** 1.1.0 | **minSdk:** 28 (Android 9) | **targetSdk:** 36
 
 ---
 
@@ -173,6 +173,17 @@ Este ajuste persiste entre reinicios de la app y aplica a todas las tablets indi
 ---
 
 ## Historial de versiones
+
+### v1.1.0 — 2026-05-26
+
+Sistema de calidad biométrica en tiempo real y validaciones mejoradas en el registro de inspectores.
+
+**Novedades:**
+- **Calidad biométrica en tiempo real** — el sistema evalúa frame a frame si el rostro cumple las condiciones necesarias antes de permitir la captura (iluminación, ángulo, tamaño de rostro)
+- **`QualityBar`** — indicador visual con icono y texto que guía al inspector: "Busque mejor iluminación", "Acérquese a la cámara", "Mire directamente a la cámara"
+- **`FaceQuality`** — evaluación pura en Kotlin: brightness ∈ [55, 215], |yaw| < 20°, |pitch| < 15°, |roll| < 20°, faceWidth > 22% del frame
+- **Validaciones en EnrollScreen** — la captura frontal solo se habilita cuando la calidad es correcta; los desafíos de pose reutilizan la misma lógica
+- Integrada en `FaceLoginScreen` y `CaptureScreen`
 
 ### v1.0.0 — 2026-05-22
 
